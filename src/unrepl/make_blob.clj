@@ -84,32 +84,17 @@
         regular s))
     (str sb)))
 
-(defn- gen-blob [^String code session-actions]
+(defn- gen-blob [^String code]
   (let [template (slurp (io/resource "unrepl/blob-template.clj"))
         code (str/replace template "<BLOB-PAYLOAD>" code)
         code (strip-spaces-and-comments code)
         suffix (str "$" (-> code (.getBytes "UTF-8") sha1 java.io.ByteArrayInputStream. base64-encode))]
-    (str (str/replace code #"(?<!:)unrepl\.(?:repl|print)" (fn [x] (str x suffix))) "\n" session-actions "\n"))) ; newline to force eval by the repl
+    (str (str/replace code #"(?<!:)unrepl\.(?:repl|print)" (fn [x] (str x suffix))) "\n"))) ; newline to force eval by the repl
 
 (defn -main
-  ([] (-main "resources/unrepl/blob.clj" "{}"))
-  ([target session-actions]
+  ([] (-main "resources/unrepl/blob.clj"))
+  ([target]
     (-> target io/file .getParentFile .mkdirs)
-    (let [session-actions-source (if (re-find #"^\s*\{" session-actions) session-actions (slurp session-actions))
-          session-actions-map (edn/read-string {:default (fn [tag data] (tagged-literal 'unrepl-make-blob-unquote (list 'tagged-literal (tagged-literal 'unrepl-make-blob-quote tag) data)))} session-actions-source)
-          code (apply str (map #(slurp (io/resource %)) ["unrepl/core.clj" "unrepl/print.clj" "unrepl/repl.clj"]))]
-      (if (map? session-actions-map)
-        (let [session-actions-map (into session-actions-map
-                                    (map (fn [[k v]]
-                                           [k (tagged-literal 'unrepl-make-blob-syntaxquote
-                                                (if (and (seq? v) (symbol? (first v)) (namespace (first v)))
-                                                  (list 'unrepl.repl/ensure-ns v)
-                                                  v))]))
-                                    session-actions-map)
-              session-actions (-> session-actions-map pr-str 
-                                (str/replace #"#unrepl-make-blob-(?:syntax|un)?quote " {"#unrepl-make-blob-syntaxquote " "`"
-                                                                                        "#unrepl-make-blob-unquote " "~"
-                                                                                        "#unrepl-make-blob-quote " "'"}))]
-          (spit target (gen-blob code session-actions)))
-        (println "The arguments must be: a target file name and an EDN map.")))))
+    (let [code (apply str (map #(slurp (io/resource %)) ["unrepl/core.clj" "unrepl/print.clj" "unrepl/repl.clj"]))]
+      (spit target (gen-blob code)))))
 

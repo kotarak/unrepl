@@ -278,6 +278,16 @@
                              eval-id])))))
       request-prompt)))
 
+(defn read-ext-session-actions
+  []
+  (->> (edn/read {:default tagged-literal} *in*)
+    (into {} (map (fn [[k v]]
+                    [k (if (and (seq? v) (symbol? (first v)) (namespace (first v)))
+                         `(do
+                            (require '~(symbol (namespace (first v))))
+                            ~v)
+                         v)])))))
+
 (defn start [ext-session-actions]
   (with-local-vars [prompt-vars #{#'*ns* #'*warn-on-reflection*}
                     current-eval-future nil]
@@ -364,6 +374,7 @@
                               (when-some [f (some-> session-state deref :side-loader deref)]
                                 (f k x))))]
       (swap! session-state assoc :class-loader slcl)
+      (swap! session-state assoc :ext-session-actions ext-session-actions)
       (swap! sessions assoc session-id session-state)
       (binding [*out* (scheduled-writer :out unrepl/non-eliding-write)
                 *err* (tagging-writer :err unrepl/non-eliding-write)
@@ -413,11 +424,6 @@
   (let [cl (.getContextClassLoader (Thread/currentThread))]
     (try
       (some->> session-id session :class-loader (.setContextClassLoader (Thread/currentThread)))
-      (start)
+      (start (some->> session-id session :ext-session-actions))
       (finally
         (.setContextClassLoader (Thread/currentThread) cl)))))
-
-(defmacro ensure-ns [[fully-qualified-var-name & args :as expr]]
-  `(do
-     (require '~(symbol (namespace fully-qualified-var-name)))
-     ~expr))
