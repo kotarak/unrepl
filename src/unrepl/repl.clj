@@ -413,7 +413,7 @@
   (let [cl (.getContextClassLoader (Thread/currentThread))]
     (try
       (some->> session-id session :class-loader (.setContextClassLoader (Thread/currentThread)))
-      (start)
+      (start {})
       (finally
         (.setContextClassLoader (Thread/currentThread) cl)))))
 
